@@ -36,20 +36,20 @@ export default function CalendarHeader({
 
   return (
     <div
-      className={`rounded-xl border p-4 ${
+      className={`rounded-xl border p-3 sm:p-4 ${
         theme === 'dark' ? 'border-slate-700 bg-slate-800/60' : 'border-slate-200 bg-slate-50'
       }`}
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 sm:gap-4">
           <FlipDateCard value={dateLabel} theme={theme} />
           <div>
-          <h2 className="text-2xl font-semibold tracking-[0.08em]">{monthName.toUpperCase()}</h2>
+          <h2 className="text-xl font-semibold tracking-[0.06em] sm:text-2xl sm:tracking-[0.08em]">{monthName.toUpperCase()}</h2>
           <p className={`text-xs tracking-[0.12em] ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>{year}</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button
             onClick={onPreviousMonth}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-700 transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-700"
@@ -74,19 +74,19 @@ export default function CalendarHeader({
       <div className="flex flex-wrap gap-2">
         <button
           onClick={onTodayRange}
-          className="rounded-full bg-cyan-600 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-cyan-700"
+          className="rounded-full bg-cyan-600 px-3 py-1.5 text-[10px] font-semibold text-white transition hover:bg-cyan-700 sm:text-[11px]"
         >
           Today Range
         </button>
         <button
           onClick={onWeekendRange}
-          className="rounded-full bg-cyan-700 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-cyan-800"
+          className="rounded-full bg-cyan-700 px-3 py-1.5 text-[10px] font-semibold text-white transition hover:bg-cyan-800 sm:text-[11px]"
         >
           Weekend Range
         </button>
         <button
           onClick={onMonthRange}
-          className="rounded-full bg-slate-800 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-slate-900 dark:bg-slate-600 dark:hover:bg-slate-500"
+          className="rounded-full bg-slate-800 px-3 py-1.5 text-[10px] font-semibold text-white transition hover:bg-slate-900 dark:bg-slate-600 dark:hover:bg-slate-500 sm:text-[11px]"
         >
           Full Month
         </button>

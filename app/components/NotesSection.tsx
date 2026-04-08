@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface NotesSectionProps {
   monthKey: string;
@@ -8,15 +8,17 @@ interface NotesSectionProps {
   theme: 'light' | 'dark';
 }
 
-interface MonthlyNotes {
-  generalNotes: string;
-  dateNotes: Record<string, string>;
+interface NoteItem {
+  id: string;
+  text: string;
+  createdAt: number;
 }
 
-const templateMap = {
-  goals: 'Top goals:\n1.\n2.\n3.\n\nMust do this week:\n-\n-\n',
-  work: 'Meetings:\n-\n-\nDeliverables:\n-\n-\nFollow-ups:\n-\n',
-} as const;
+interface NotesStore {
+  entries: Record<string, NoteItem[]>;
+}
+
+const STORAGE_KEY = 'calendar-simple-notes-v1';
 
 const formatDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -25,194 +27,264 @@ const formatDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function NotesSection({ monthKey, selectedDates, theme }: NotesSectionProps) {
-  const [notes, setNotes] = useState<MonthlyNotes>({ generalNotes: '', dateNotes: {} });
-  const [activeTab, setActiveTab] = useState<'general' | 'specific'>('general');
-  const [copied, setCopied] = useState(false);
+const formatDateText = (date: Date) => `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+
+const buildSelectionKey = (start: Date | null, end: Date | null) => {
+  if (!start) return '';
+
+  const startKey = formatDateKey(start);
+  if (!end) return startKey;
+
+  const endKey = formatDateKey(end);
+  return startKey <= endKey ? `${startKey}__${endKey}` : `${endKey}__${startKey}`;
+};
+
+export default function NotesSection({ selectedDates, theme }: NotesSectionProps) {
+  const [store, setStore] = useState<NotesStore>({ entries: {} });
+  const [draft, setDraft] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(`notes_${monthKey}`);
-    if (stored) {
-      try {
-        setNotes(JSON.parse(stored));
-      } catch {
-        setNotes({ generalNotes: '', dateNotes: {} });
-      }
-      return;
-    }
-    setNotes({ generalNotes: '', dateNotes: {} });
-  }, [monthKey]);
-
-  useEffect(() => {
-    localStorage.setItem(`notes_${monthKey}`, JSON.stringify(notes));
-  }, [notes, monthKey]);
-
-  const selectedDateKey = useMemo(() => {
-    if (!selectedDates.start) return '';
-    const start = formatDateKey(selectedDates.start);
-    if (!selectedDates.end) return start;
-    const end = formatDateKey(selectedDates.end);
-    return `${start}_${end}`;
-  }, [selectedDates.end, selectedDates.start]);
-
-  const dateRangeText = useMemo(() => {
-    if (!selectedDates.start) return 'No range selected';
-    if (!selectedDates.end) return selectedDates.start.toLocaleDateString();
-    return `${selectedDates.start.toLocaleDateString()} -> ${selectedDates.end.toLocaleDateString()}`;
-  }, [selectedDates.end, selectedDates.start]);
-
-  const currentDateNote = selectedDateKey ? notes.dateNotes[selectedDateKey] ?? '' : '';
-
-  const updateGeneral = (value: string) => {
-    setNotes((prev) => ({ ...prev, generalNotes: value }));
-  };
-
-  const updateSpecific = (value: string) => {
-    if (!selectedDateKey) return;
-    setNotes((prev) => ({
-      ...prev,
-      dateNotes: {
-        ...prev.dateNotes,
-        [selectedDateKey]: value,
-      },
-    }));
-  };
-
-  const insertTemplate = (template: keyof typeof templateMap) => {
-    if (activeTab === 'general') {
-      updateGeneral(`${notes.generalNotes}${notes.generalNotes ? '\n\n' : ''}${templateMap[template]}`);
-      return;
-    }
-
-    if (!selectedDateKey) return;
-    updateSpecific(`${currentDateNote}${currentDateNote ? '\n\n' : ''}${templateMap[template]}`);
-  };
-
-  const copyCurrentNotes = async () => {
-    const payload = activeTab === 'general' ? notes.generalNotes : currentDateNote;
-    if (!payload.trim()) return;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
 
     try {
-      await navigator.clipboard.writeText(payload);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      const parsed = JSON.parse(raw) as Partial<NotesStore>;
+      setStore({ entries: parsed.entries ?? {} });
     } catch {
-      setCopied(false);
+      setStore({ entries: {} });
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  }, [store]);
+
+  const selectedKey = useMemo(
+    () => buildSelectionKey(selectedDates.start, selectedDates.end),
+    [selectedDates.end, selectedDates.start]
+  );
+
+  const rangeLabel = useMemo(() => {
+    if (!selectedDates.start) return 'No date selected';
+    if (!selectedDates.end) return formatDateText(selectedDates.start);
+    return `${formatDateText(selectedDates.start)} -> ${formatDateText(selectedDates.end)}`;
+  }, [selectedDates.end, selectedDates.start]);
+
+  const currentNotes = selectedKey ? store.entries[selectedKey] ?? [] : [];
+  const panelClasses =
+    theme === 'dark'
+      ? 'bg-slate-900/60 backdrop-blur-2xl border-white/10'
+      : 'bg-white border-slate-200 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.35)]';
+  const surfaceClasses = theme === 'dark' ? 'border-white/10' : 'border-slate-200 bg-slate-50';
+  const textClasses = theme === 'dark' ? 'text-slate-200' : 'text-slate-800';
+  const mutedTextClasses = theme === 'dark' ? 'text-slate-400' : 'text-slate-500';
+  const inputClasses =
+    theme === 'dark'
+      ? 'text-slate-200 placeholder:text-slate-500'
+      : 'text-slate-800 placeholder:text-slate-500';
+
+  const addNote = () => {
+    const text = draft.trim();
+    if (!selectedKey || !text) return;
+
+    const newNote: NoteItem = {
+      id: `note-${Date.now()}`,
+      text,
+      createdAt: Date.now(),
+    };
+
+    setStore((prev) => ({
+      ...prev,
+      entries: {
+        ...prev.entries,
+        [selectedKey]: [newNote, ...(prev.entries[selectedKey] ?? [])],
+      },
+    }));
+
+    setDraft('');
+    setJustAddedId(newNote.id);
+    window.setTimeout(() => {
+      setJustAddedId(null);
+      listRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 120);
+  };
+
+  const deleteNote = (id: string) => {
+    if (!selectedKey) return;
+
+    setStore((prev) => ({
+      ...prev,
+      entries: {
+        ...prev.entries,
+        [selectedKey]: (prev.entries[selectedKey] ?? []).filter((note) => note.id !== id),
+      },
+    }));
+
+    if (editingId === id) {
+      setEditingId(null);
+      setEditingText('');
     }
   };
 
-  const exportCurrentNotes = () => {
-    const payload = activeTab === 'general' ? notes.generalNotes : currentDateNote;
-    if (!payload.trim()) return;
+  const startEdit = (note: NoteItem) => {
+    setEditingId(note.id);
+    setEditingText(note.text);
+  };
 
-    const title = activeTab === 'general' ? `${monthKey}-month-notes` : `${monthKey}-range-notes`;
-    const content = `Title: ${title}\n\n${payload}`;
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${title}.txt`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+  const saveEdit = () => {
+    if (!selectedKey || !editingId) return;
+    const text = editingText.trim();
+    if (!text) return;
+
+    setStore((prev) => ({
+      ...prev,
+      entries: {
+        ...prev.entries,
+        [selectedKey]: (prev.entries[selectedKey] ?? []).map((note) =>
+          note.id === editingId ? { ...note, text } : note
+        ),
+      },
+    }));
+
+    setEditingId(null);
+    setEditingText('');
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingText('');
+  };
+
+  const addLineToDraft = () => {
+    if (!selectedKey) return;
+    setDraft((prev) => `${prev}${prev ? '\n' : ''}- `);
   };
 
   return (
     <div
-      className={`rounded-xl border ${
-        theme === 'dark' ? 'border-slate-700 bg-slate-800/60' : 'border-slate-200 bg-white'
-      }`}
+      className={`flex h-full min-h-0 flex-col overflow-y-auto rounded-[1.6rem] border p-4 [scrollbar-width:thin] [scrollbar-color:#00df9a_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#00df9a] ${panelClasses}`}
     >
-      <div className={`border-b px-4 py-3 ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`}>
-        <h3 className="text-sm font-semibold tracking-[0.18em]">NOTES</h3>
-        <p className={`mt-1 text-xs ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>{dateRangeText}</p>
+      <header className="mb-3 flex items-center justify-between gap-3">
+        <p className={`font-mono text-sm ${textClasses}`}>{rangeLabel}</p>
+        <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${theme === 'dark' ? 'border-cyan-300/70 bg-cyan-300/15 text-cyan-100 shadow-[0_0_10px_rgba(56,189,248,0.45)]' : 'border-cyan-500/30 bg-cyan-100 text-cyan-900'}`}>
+          Status: Active
+        </span>
+      </header>
+
+      <div className={`mb-3 min-h-0 flex-1 rounded-xl border p-3 ${surfaceClasses}`}>
+        <div className="mb-2 flex flex-col gap-2">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            disabled={!selectedKey}
+            placeholder={selectedKey ? 'Write a note...' : 'Select a date or range to add notes.'}
+            className={`min-h-[84px] w-full min-w-0 resize-none rounded-lg border border-white/15 bg-transparent px-3 py-2 text-sm outline-none ${
+              inputClasses
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              onClick={addNote}
+              disabled={!selectedKey || !draft.trim()}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold hover:bg-cyan-300/10 disabled:opacity-60 ${theme === 'dark' ? 'border-cyan-300/45 text-cyan-200' : 'border-cyan-500/30 text-cyan-900 hover:bg-cyan-100'}`}
+            >
+              Add
+            </button>
+            <button
+              onClick={addLineToDraft}
+              disabled={!selectedKey}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold hover:bg-black/5 disabled:opacity-60 ${theme === 'dark' ? 'border-white/20 text-slate-200 hover:bg-white/10' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}
+            >
+              Bullet
+            </button>
+          </div>
+        </div>
+
+        <div className={`mb-2 h-px ${theme === 'dark' ? 'bg-white/10' : 'bg-slate-200'}`} />
+
+        <div
+          ref={listRef}
+          className="max-h-[220px] overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:#00df9a_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#00df9a]"
+        >
+          <div className="space-y-2">
+          {currentNotes.length === 0 && (
+            <p className={`rounded-lg border border-dashed px-3 py-2 text-xs ${theme === 'dark' ? 'border-white/15 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
+              No notes yet for this selection.
+            </p>
+          )}
+
+          {currentNotes.map((note) => (
+            <div
+              key={note.id}
+              className={`rounded-lg border px-3 py-2 transition ${
+                justAddedId === note.id
+                  ? 'border-cyan-300/70 bg-cyan-300/10 shadow-[0_0_0_1px_rgba(103,232,249,0.35)]'
+                  : theme === 'dark'
+                    ? 'border-white/10'
+                    : 'border-slate-200 bg-white'
+              }`}
+            >
+              {editingId === note.id ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={editingText}
+                    onChange={(event) => setEditingText(event.target.value)}
+                    className={`min-h-[84px] w-full resize-none rounded-lg border bg-transparent px-2 py-1.5 text-sm outline-none ${theme === 'dark' ? 'border-white/15 text-slate-200' : 'border-slate-200 text-slate-800'}`}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveEdit}
+                      className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${theme === 'dark' ? 'border-cyan-300/60 text-cyan-200' : 'border-cyan-500/30 text-cyan-900'}`}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${theme === 'dark' ? 'border-white/25 text-slate-300' : 'border-slate-300 text-slate-700'}`}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className={`whitespace-pre-wrap text-sm ${textClasses}`}>
+                    {note.text}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] ${mutedTextClasses}`}>
+                      {new Date(note.createdAt).toLocaleString()}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startEdit(note)}
+                        className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${theme === 'dark' ? 'border-white/25 text-slate-200' : 'border-slate-300 text-slate-700'}`}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteNote(note.id)}
+                        className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${theme === 'dark' ? 'border-rose-300/50 text-rose-200' : 'border-rose-300 text-rose-700'}`}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          </div>
+        </div>
       </div>
 
-      <div className={`flex border-b ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`}>
-        <button
-          onClick={() => setActiveTab('general')}
-          className={`flex-1 px-3 py-2 text-xs font-semibold tracking-wide transition ${
-            activeTab === 'general'
-              ? 'bg-cyan-600 text-white'
-              : theme === 'dark'
-              ? 'text-slate-200 hover:bg-slate-700'
-              : 'text-slate-700 hover:bg-slate-100'
-          }`}
-        >
-          Month
-        </button>
-        <button
-          onClick={() => setActiveTab('specific')}
-          disabled={!selectedDates.start}
-          className={`flex-1 px-3 py-2 text-xs font-semibold tracking-wide transition ${
-            activeTab === 'specific'
-              ? 'bg-cyan-600 text-white'
-              : selectedDates.start
-              ? theme === 'dark'
-                ? 'text-slate-200 hover:bg-slate-700'
-                : 'text-slate-700 hover:bg-slate-100'
-              : 'cursor-not-allowed text-slate-400'
-          }`}
-        >
-          Range
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2 px-4 py-3">
-        <button
-          onClick={() => insertTemplate('goals')}
-          className="rounded-md border border-cyan-500 px-2 py-1 text-[11px] font-semibold text-cyan-700 transition hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-900/30"
-        >
-          Goals Template
-        </button>
-        <button
-          onClick={() => insertTemplate('work')}
-          className="rounded-md border border-cyan-500 px-2 py-1 text-[11px] font-semibold text-cyan-700 transition hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-900/30"
-        >
-          Work Template
-        </button>
-        <button
-          onClick={copyCurrentNotes}
-          className="rounded-md border border-slate-400 px-2 py-1 text-[11px] font-semibold transition hover:bg-slate-100 dark:border-slate-500 dark:hover:bg-slate-700"
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-        <button
-          onClick={exportCurrentNotes}
-          className="rounded-md border border-slate-400 px-2 py-1 text-[11px] font-semibold transition hover:bg-slate-100 dark:border-slate-500 dark:hover:bg-slate-700"
-        >
-          Export TXT
-        </button>
-      </div>
-
-      <div className="px-4 pb-4">
-        <textarea
-          value={activeTab === 'general' ? notes.generalNotes : currentDateNote}
-          onChange={(event) =>
-            activeTab === 'general' ? updateGeneral(event.target.value) : updateSpecific(event.target.value)
-          }
-          disabled={activeTab === 'specific' && !selectedDates.start}
-          placeholder={
-            activeTab === 'general'
-              ? 'Write general month notes...'
-              : selectedDates.start
-              ? 'Write notes for selected range...'
-              : 'Select at least one date first.'
-          }
-          className={`h-52 w-full resize-none rounded-md border px-3 py-2 text-sm leading-7 outline-none ${
-            theme === 'dark'
-              ? 'border-slate-600 bg-slate-900 text-slate-100 focus:border-cyan-500'
-              : 'border-slate-300 bg-white text-slate-800 focus:border-cyan-600'
-          }`}
-          style={{
-            backgroundImage:
-              theme === 'dark'
-                ? 'repeating-linear-gradient(to bottom, transparent, transparent 27px, rgba(148,163,184,0.26) 28px)'
-                : 'repeating-linear-gradient(to bottom, transparent, transparent 27px, rgba(148,163,184,0.28) 28px)',
-          }}
-        />
-      </div>
+      <p className={`mt-3 text-xs ${mutedTextClasses}`}>
+        Auto-saved per selected date or range.
+      </p>
     </div>
   );
 }

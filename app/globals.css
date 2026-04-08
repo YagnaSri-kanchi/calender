@@ -3,6 +3,7 @@
 :root {
   --background: #dce8f5;
   --foreground: #171717;
+  font-size: clamp(14px, 0.7vw + 12px, 16px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -12,10 +13,56 @@
   }
 }
 
+html {
+  width: 100%;
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#__next,
+#root {
+  min-height: 100%;
 }
 
 .month-flip-stack {
@@ -360,4 +407,151 @@ body {
 
 .desk-flip-flap.flip-up {
   transform: rotateX(-180deg);
+}
+
+.date-cell-premium {
+  position: relative;
+  isolation: isolate;
+  will-change: transform, box-shadow, background-color;
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 220ms ease,
+    color 220ms ease;
+}
+
+.date-cell-premium::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.88);
+  background: radial-gradient(circle at center, rgba(125, 211, 252, 0.35) 0%, rgba(125, 211, 252, 0) 72%);
+  transition:
+    opacity 220ms ease,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.date-cell-premium:hover {
+  transform: translateY(-1px);
+}
+
+.date-cell-premium:active {
+  transform: scale(0.97);
+}
+
+.date-cell-selected {
+  box-shadow:
+    0 10px 24px -16px rgba(2, 132, 199, 0.88),
+    0 0 0 1px rgba(125, 211, 252, 0.55);
+}
+
+.date-cell-selected::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.date-cell-pop::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 1.5px solid rgba(103, 232, 249, 0.62);
+  animation: dateCellRing 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.date-cell-pop {
+  animation: dateCellPop 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.calendar-modal-panel {
+  animation: calendarModalIn 230ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes dateCellPop {
+  0% {
+    transform: scale(0.94);
+    box-shadow: 0 2px 4px -3px rgba(2, 132, 199, 0.2);
+  }
+  58% {
+    transform: scale(1.06);
+    box-shadow:
+      0 12px 28px -16px rgba(2, 132, 199, 0.92),
+      0 0 0 1px rgba(125, 211, 252, 0.62);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes dateCellRing {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  45% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes calendarModalIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 1280px) {
+  .desk-flip-calendar {
+    width: 88px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .month-flip-stack {
+    perspective: 1200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .desk-flip-calendar {
+    width: 80px;
+  }
+
+  .desk-stage {
+    height: 64px;
+  }
+
+  .desk-date-card,
+  .desk-flip-flap .front,
+  .desk-flip-flap .back {
+    font-size: 1.75rem;
+  }
+
+  .calendar-modal-panel {
+    width: calc(100vw - 1.5rem);
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .month-flip-stack {
+    border-radius: 1rem;
+  }
+
+  .date-cell-premium {
+    min-height: 2.25rem;
+  }
 }

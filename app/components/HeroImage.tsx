@@ -146,7 +146,7 @@ export default function HeroImage({ currentDate }: HeroImageProps) {
   };
 
   return (
-    <div className="relative h-64 overflow-hidden bg-slate-200 md:h-80">
+    <div className="relative h-28 overflow-hidden bg-slate-200 md:h-36 lg:h-40">
       <div className="hero-parallax-inner absolute inset-0">
         <img
           src={activeSrc}
